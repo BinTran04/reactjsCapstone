@@ -1,0 +1,12 @@
+@import "tailwindcss";
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  /* Dùng box-shadow để đổ màu nền đè lên màu trắng mặc định */
+  /* Mã màu #1f2937 tương ứng với bg-gray-800 của Tailwind */
+  -webkit-box-shadow: 0 0 0 30px #1f2937 inset !important;
+
+  /* Đổi màu chữ thành trắng */
+  -webkit-text-fill-color: white !important;
+}
