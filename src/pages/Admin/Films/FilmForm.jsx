@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, NavLink } from "react-router-dom";
+import axios from "axios";
+import moment from "moment";
 
 export default function FilmForm() {
   const { id } = useParams();
@@ -21,24 +23,62 @@ export default function FilmForm() {
     hinhAnh: null,
   });
 
+  // 1. LẤY THÔNG TIN PHIM KHI Ở CHẾ ĐỘ EDIT
+  // --- THAY THẾ ĐOẠN useEffect CŨ BẰNG ĐOẠN NÀY ---
   useEffect(() => {
     if (isEdit) {
-      setFormData({
-        tenPhim: "Mỹ Nhân Ngư",
-        trailer: "https://youtube.com/example",
-        moTa: "Phim hài...",
-        ngayKhoiChieu: "2024-01-01",
-        dangChieu: true,
-        sapChieu: false,
-        hot: true,
-        danhGia: 8,
-        hinhAnh: null,
-      });
-      setImgPreview(
-        "https://movienew.cybersoft.edu.vn/hinhanh/my-nhan-ngu_gp01.jpg"
-      );
+      const fetchFilmDetail = async () => {
+        try {
+          console.log("1. Bắt đầu lấy dữ liệu phim ID:", id);
+
+          const result = await axios.get(
+            `https://movienew.cybersoft.edu.vn/api/QuanLyPhim/LayThongTinPhim?MaPhim=${id}`
+          );
+
+          console.log("2. Kết quả API trả về:", result.data);
+
+          const filmData = result.data.content;
+
+          if (!filmData) {
+            console.error(
+              "3. Lỗi: Không tìm thấy data trong result.data.content"
+            );
+            return;
+          }
+
+          console.log("3. Dữ liệu phim tìm thấy:", filmData);
+
+          // Cập nhật State
+          setFormData({
+            tenPhim: filmData.tenPhim || "",
+            trailer: filmData.trailer || "",
+            moTa: filmData.moTa || "",
+            // Kiểm tra kỹ ngày tháng
+            ngayKhoiChieu: filmData.ngayKhoiChieu
+              ? moment(filmData.ngayKhoiChieu).format("YYYY-MM-DD")
+              : "",
+            dangChieu: filmData.dangChieu || false,
+            sapChieu: filmData.sapChieu || false,
+            hot: filmData.hot || false,
+            danhGia: filmData.danhGia || 0,
+            hinhAnh: null,
+          });
+
+          // Set ảnh preview
+          setImgPreview(filmData.hinhAnh);
+          console.log("4. Đã setFormData thành công!");
+        } catch (error) {
+          console.error("❌ Lỗi khi gọi API:", error);
+          if (error.response && error.response.status === 404) {
+            alert("Phim này không tồn tại hoặc đã bị xóa!");
+            navigate("/admin/films"); // Quay về danh sách nếu lỗi
+          }
+        }
+      };
+
+      fetchFilmDetail();
     }
-  }, [isEdit]);
+  }, [isEdit, id]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -56,11 +96,63 @@ export default function FilmForm() {
     }
   };
 
-  const handleSubmit = (e) => {
+  // 2. LOGIC SUBMIT (PHÂN BIỆT THÊM & SỬA)
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Dữ liệu submit:", formData);
-    alert(isEdit ? "Cập nhật thành công!" : "Thêm mới thành công!");
-    navigate("/admin/films");
+
+    // Tạo FormData
+    const data = new FormData();
+    data.append("tenPhim", formData.tenPhim);
+    data.append("trailer", formData.trailer);
+    data.append("moTa", formData.moTa);
+    data.append("maNhom", "GP01"); // Mã nhóm cố định
+    data.append(
+      "ngayKhoiChieu",
+      moment(formData.ngayKhoiChieu).format("DD/MM/YYYY")
+    );
+    data.append("sapChieu", formData.sapChieu);
+    data.append("dangChieu", formData.dangChieu);
+    data.append("hot", formData.hot);
+    data.append("danhGia", formData.danhGia);
+
+    // Xử lý File ảnh
+    if (formData.hinhAnh) {
+      // Nếu có chọn file mới -> gửi file
+      data.append("File", formData.hinhAnh, formData.hinhAnh.name);
+    } else if (isEdit) {
+      // TRƯỜNG HỢP KHÓ:
+      // Nếu đang edit mà không chọn ảnh mới, API CapNhatPhimUpload thường VẪN ĐÒI có file.
+      // Nếu backend hỗ trợ giữ ảnh cũ thì không sao, nhưng nếu bắt buộc:
+      // Bạn có thể cần fetch ảnh cũ về convert sang Blob (nâng cao),
+      // hoặc đơn giản là nhắc user chọn lại ảnh nếu API báo lỗi.
+      // Ở đây tạm thời ta không append 'File' nếu không có file mới.
+    }
+
+    try {
+      if (isEdit) {
+        // --- LOGIC CẬP NHẬT ---
+        // API yêu cầu thêm maPhim vào body khi update
+        data.append("maPhim", id);
+
+        await axios.post(
+          "https://movienew.cybersoft.edu.vn/api/QuanLyPhim/CapNhatPhimUpload",
+          data
+        );
+        alert("Cập nhật phim thành công!");
+      } else {
+        // --- LOGIC THÊM MỚI ---
+        await axios.post(
+          "https://movienew.cybersoft.edu.vn/api/QuanLyPhim/ThemPhimUploadHinh",
+          data
+        );
+        alert("Thêm phim mới thành công!");
+      }
+
+      navigate("/admin/films");
+    } catch (error) {
+      console.error("Lỗi submit:", error);
+      alert(error.response?.data?.content || "Có lỗi xảy ra!");
+    }
   };
 
   const getSizeClass = () => {
@@ -86,7 +178,6 @@ export default function FilmForm() {
           to="/admin/films"
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 shadow-sm"
         >
-          {/* Icon Mũi tên */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
@@ -127,9 +218,7 @@ export default function FilmForm() {
           ))}
         </div>
 
-        {/* --- CÁC INPUT (ĐÃ THÊM text-gray-900 ĐỂ HIỆN CHỮ ĐEN) --- */}
-
-        {/* Tên Phim */}
+        {/* --- CÁC INPUT --- */}
         <div>
           <label
             className={`block font-semibold text-gray-700 ${getLabelSize()}`}
@@ -144,7 +233,6 @@ export default function FilmForm() {
           />
         </div>
 
-        {/* Trailer */}
         <div>
           <label
             className={`block font-semibold text-gray-700 ${getLabelSize()}`}
@@ -159,7 +247,6 @@ export default function FilmForm() {
           />
         </div>
 
-        {/* Mô tả */}
         <div>
           <label
             className={`block font-semibold text-gray-700 ${getLabelSize()}`}
@@ -175,7 +262,6 @@ export default function FilmForm() {
           ></textarea>
         </div>
 
-        {/* Ngày chiếu & Đánh giá */}
         <div className="grid grid-cols-2 gap-8">
           <div>
             <label
@@ -217,65 +303,48 @@ export default function FilmForm() {
             Trạng thái
           </label>
           <div className="flex space-x-8 items-center bg-gray-50 p-4 rounded border border-gray-200">
-            {/* Đang chiếu */}
             <label className="flex items-center space-x-2 cursor-pointer">
-              <div className="relative inline-flex items-center">
-                <input
-                  type="checkbox"
-                  name="dangChieu"
-                  checked={formData.dangChieu}
-                  onChange={handleChange}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-              </div>
+              <input
+                type="checkbox"
+                name="dangChieu"
+                checked={formData.dangChieu}
+                onChange={handleChange}
+                className="accent-blue-600 w-5 h-5"
+              />
               <span className="text-gray-700 text-sm">Đang chiếu</span>
             </label>
-
-            {/* Sắp chiếu */}
             <label className="flex items-center space-x-2 cursor-pointer">
-              <div className="relative inline-flex items-center">
-                <input
-                  type="checkbox"
-                  name="sapChieu"
-                  checked={formData.sapChieu}
-                  onChange={handleChange}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-              </div>
+              <input
+                type="checkbox"
+                name="sapChieu"
+                checked={formData.sapChieu}
+                onChange={handleChange}
+                className="accent-blue-600 w-5 h-5"
+              />
               <span className="text-gray-700 text-sm">Sắp chiếu</span>
             </label>
-
-            {/* Hot */}
             <label className="flex items-center space-x-2 cursor-pointer">
-              <div className="relative inline-flex items-center">
-                <input
-                  type="checkbox"
-                  name="hot"
-                  checked={formData.hot}
-                  onChange={handleChange}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
-              </div>
+              <input
+                type="checkbox"
+                name="hot"
+                checked={formData.hot}
+                onChange={handleChange}
+                className="accent-red-500 w-5 h-5"
+              />
               <span className="text-gray-700 text-sm font-bold">HOT</span>
             </label>
           </div>
         </div>
 
-        {/* Upload Ảnh - SỬA LẠI LAYOUT (Dọc) */}
+        {/* Upload Ảnh */}
         <div>
           <label
             className={`block font-semibold text-gray-700 mb-2 ${getLabelSize()}`}
           >
             Hình ảnh poster
           </label>
-
-          {/* Đổi từ space-x-6 (ngang) thành space-y-3 (dọc) và bỏ flex-row */}
           <div className="flex flex-col items-start gap-4">
-            {/* 1. Khung Preview */}
-            <div className="w-40 h-40 border border-gray-300 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden shadow-sm">
+            <div className="w-40 h-52 border border-gray-300 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden shadow-sm">
               {imgPreview ? (
                 <img
                   src={imgPreview}
@@ -283,26 +352,9 @@ export default function FilmForm() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="text-center text-gray-400">
-                  <svg
-                    className="w-10 h-10 mx-auto mb-2"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <span className="text-xs">No image</span>
-                </div>
+                <span className="text-xs text-gray-400">No image</span>
               )}
             </div>
-
-            {/* 2. Nút chọn file & Info (Nằm bên dưới khung ảnh) */}
             <div className="flex flex-col">
               <input
                 type="file"
@@ -311,42 +363,27 @@ export default function FilmForm() {
                 onChange={handleFileChange}
                 accept="image/*"
               />
-
               <label
                 htmlFor="upload-photo"
                 className="cursor-pointer bg-blue-100 text-blue-700 hover:bg-blue-200 px-4 py-2 rounded font-medium transition duration-200 inline-flex items-center w-max mb-2"
               >
-                <svg
-                  className="w-5 h-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                  />
-                </svg>
                 Chọn file ảnh
               </label>
-
-              <div className="text-sm text-gray-500">
-                <p className="italic">* Dung lượng dưới 10MB</p>
-                <p className="italic">* Định dạng: JPG, PNG, GIF</p>
+              <div className="text-sm text-gray-500 italic">
+                {isEdit
+                  ? "* Lưu ý: Chọn ảnh mới sẽ thay thế ảnh cũ"
+                  : "* Dung lượng dưới 10MB"}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Button */}
         <div className="pt-4">
           <button
             type="submit"
             className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded shadow-sm hover:shadow transition duration-200"
           >
-            {isEdit ? "Cập Nhật" : "Thêm Phim"}
+            {isEdit ? "Cập Nhật Phim" : "Thêm Phim Mới"}
           </button>
         </div>
       </form>

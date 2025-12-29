@@ -27,18 +27,18 @@ export default function Detail() {
         const allDates = [];
 
         // Duyệt qua tất cả hệ thống rạp -> cụm rạp -> lịch chiếu để gom ngày
-        if (data.heThongRapChieu) {
-          data.heThongRapChieu.forEach((htr) => {
-            htr.cumRapChieu.forEach((cr) => {
-              cr.lichChieuPhim.forEach((lich) => {
-                const date = dayjs(lich.ngayChieuGioChieu).format("YYYY-MM-DD");
-                if (!allDates.includes(date)) {
-                  allDates.push(date);
-                }
-              });
+        if (!data.heThongRapChieu) return;
+
+        data.heThongRapChieu.forEach((htr) => {
+          htr.cumRapChieu.forEach((cr) => {
+            cr.lichChieuPhim.forEach((lich) => {
+              const date = dayjs(lich.ngayChieuGioChieu).format("YYYY-MM-DD");
+              if (!allDates.includes(date)) {
+                allDates.push(date);
+              }
             });
           });
-        }
+        });
 
         // Sắp xếp ngày tăng dần
         allDates.sort((a, b) => dayjs(a).diff(dayjs(b)));
@@ -64,7 +64,7 @@ export default function Detail() {
         }
       })
       .catch((err) => console.log("Lỗi lấy chi tiết phim:", err));
-  }, [id]);
+  }, []);
 
   if (!movie)
     return (

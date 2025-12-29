@@ -34,29 +34,24 @@ const AppRouter = () => {
 
       {/* --- ADMIN ROUTES --- */}
       {/* 1. Bảo vệ bằng AdminGuard (kiểm tra đăng nhập/quyền) */}
-      <Route path="/admin" element={<AdminGuard />}>
-        {/* 2. Sử dụng AdminTemplate làm Layout (có Sidebar) */}
-        <Route element={<AdminTemplate />}>
-          {/* 3. Các trang con bên trong */}
+      <Route path="/admin" element={<AdminTemplate />}>
+        {/* Mặc định vào /admin sẽ hiện danh sách phim */}
+        <Route index element={<FilmManagement />} />
 
-          {/* Mặc định vào /admin sẽ hiện danh sách phim */}
-          <Route index element={<FilmManagement />} />
+        {/* Quản lý danh sách phim */}
+        <Route path="films" element={<FilmManagement />} />
 
-          {/* Quản lý danh sách phim */}
-          <Route path="films" element={<FilmManagement />} />
+        {/* Thêm phim mới */}
+        <Route path="films/add" element={<FilmForm />} />
 
-          {/* Thêm phim mới (Trùng khớp với ảnh form thêm phim bạn gửi) */}
-          <Route path="films/add" element={<FilmForm />} />
+        {/* Chỉnh sửa phim */}
+        <Route path="films/edit/:id" element={<FilmForm />} />
 
-          {/* Chỉnh sửa phim (Dùng chung form với Thêm mới nhưng có ID) */}
-          <Route path="films/edit/:id" element={<FilmForm />} />
+        {/* Tạo lịch chiếu */}
+        <Route path="showtime" element={<Showtime />} />
 
-          {/* Tạo lịch chiếu (Trùng khớp với ảnh showtime bạn gửi) */}
-          <Route path="showtime" element={<Showtime />} />
-
-          {/* Quản lý user (Làm sau) */}
-          <Route path="users" element={<UserManagement />} />
-        </Route>
+        {/* Quản lý user */}
+        <Route path="users" element={<UserManagement />} />
       </Route>
 
       {/* Trang 404 */}
