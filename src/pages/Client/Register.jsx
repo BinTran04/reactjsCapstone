@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../services/api";
+import { api } from "../../services/api"; // Đảm bảo đường dẫn này đúng với project của bạn
 
 export default function Register() {
   const navigate = useNavigate();
@@ -11,7 +11,7 @@ export default function Register() {
     matKhau: "",
     email: "",
     soDt: "",
-    maNhom: "GP01",
+    maNhom: "GP01", // Lưu ý: Nên để giống mã nhóm Admin của bạn (ví dụ GP09) để dễ quản lý
     hoTen: "",
   });
 
@@ -39,32 +39,34 @@ export default function Register() {
 
     try {
       // 2. Gọi API Đăng Ký
-      const response = await api.post("/QuanLyNguoiDung/DangKy", formData);
+      // API Cybersoft yêu cầu chính xác các trường: taiKhoan, matKhau, email, soDt, maNhom, hoTen
+      await api.post("/QuanLyNguoiDung/DangKy", formData);
 
-      console.log("Kết quả đăng ký:", response.data);
-      alert("Đăng ký thành công!");
+      alert(
+        "Đăng ký tài khoản thành công! Bạn sẽ được chuyển sang trang đăng nhập."
+      );
 
       // 3. Chuyển hướng sang trang đăng nhập
       navigate("/login");
     } catch (error) {
       console.log("Lỗi đăng ký:", error);
-      // Hiển thị lỗi từ server trả về (nếu có)
-      const message = error.response?.data?.content || "Đăng ký thất bại!";
-      alert(message);
+      // Hiển thị lỗi chính xác từ Server trả về (ví dụ: "Tài khoản đã tồn tại", "Email không hợp lệ"...)
+      const errorMsg =
+        error.response?.data?.content || "Đăng ký thất bại! Vui lòng thử lại.";
+      alert(errorMsg);
     }
   };
 
-  // Class chung cho tất cả các ô input để đồng bộ giao diện
+  // Class chung cho tất cả các ô input (GIỮ NGUYÊN STYLE CỦA BẠN)
   const inputClass =
     "w-full bg-gray-700/50 text-white placeholder-gray-400 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-orange-500 focus:bg-gray-700 transition";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 relative overflow-hidden font-sans">
-      {/* 1. HÌNH NỀN GIỐNG TRANG CHỦ (Có lớp phủ tối) */}
+      {/* 1. HÌNH NỀN */}
       <div className="absolute inset-0 z-0">
         <div
           className="absolute inset-0 bg-cover bg-center"
-          // Dùng ảnh Avengers hoặc ảnh bất kỳ làm nền
           style={{
             backgroundImage:
               "url('https://movienew.cybersoft.edu.vn/hinhanh/avengers-endgame.jpg')",
@@ -73,7 +75,7 @@ export default function Register() {
         <div className="absolute inset-0 bg-black/70"></div>
       </div>
 
-      {/* 2. FORM ĐĂNG KÝ (Hiệu ứng kính mờ) */}
+      {/* 2. FORM ĐĂNG KÝ */}
       <div className="relative z-10 bg-black/50 backdrop-blur-md p-8 rounded-2xl shadow-2xl border border-white/10 w-full max-w-lg mx-4">
         {/* Logo hoặc Tiêu đề */}
         <div className="text-center mb-8">
@@ -99,7 +101,7 @@ export default function Register() {
             />
           </div>
 
-          {/* Mật khẩu - Dùng chung class inputClass để ô vuông giống hệt các ô khác */}
+          {/* Mật khẩu */}
           <div>
             <input
               type="password"
@@ -171,7 +173,7 @@ export default function Register() {
             ĐĂNG KÝ NGAY
           </button>
 
-          {/* 3. NÚT CHUYỂN QUA ĐĂNG NHẬP (Làm đẹp hơn) */}
+          {/* 3. NÚT CHUYỂN QUA ĐĂNG NHẬP */}
           <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-600/50">
             <span className="text-gray-400 text-sm">Bạn đã có tài khoản?</span>
             <button

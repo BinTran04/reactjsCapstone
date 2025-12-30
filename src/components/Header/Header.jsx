@@ -5,23 +5,18 @@ export default function Header() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
 
-  // --- 1. KIỂM TRA ĐĂNG NHẬP KHI LOAD TRANG ---
+  // --- 1. KIỂM TRA ĐĂNG NHẬP ---
   useEffect(() => {
-    // Lấy dữ liệu từ localStorage
     const userString = localStorage.getItem("user");
     if (userString) {
-      // Nếu có, chuyển từ chuỗi JSON sang Object và lưu vào state
       setUser(JSON.parse(userString));
     }
   }, []);
 
   // --- 2. HÀM ĐĂNG XUẤT ---
   const handleLogout = () => {
-    // Xóa khỏi localStorage
     localStorage.removeItem("user");
-    // Cập nhật state để giao diện render lại ngay lập tức
     setUser(null);
-    // Chuyển hướng về trang chủ
     navigate("/");
   };
 
@@ -38,7 +33,7 @@ export default function Header() {
           <span>CyberMovie</span>
         </NavLink>
 
-        {/* Menu (Giữ nguyên menu của bạn) */}
+        {/* Menu */}
         <nav className="hidden md:flex space-x-6 text-sm font-medium">
           <NavLink to="/" className="hover:text-orange-500 transition">
             Trang chủ
@@ -51,18 +46,26 @@ export default function Header() {
           </a>
         </nav>
 
-        {/* --- 3. KHU VỰC TÀI KHOẢN (SỬA ĐOẠN NÀY) --- */}
+        {/* --- 3. KHU VỰC TÀI KHOẢN --- */}
         <div className="flex items-center space-x-4">
           {user ? (
             // === NẾU ĐÃ ĐĂNG NHẬP ===
             <div className="flex items-center gap-3">
-              <span className="text-gray-300">
-                Hi,{" "}
-                <span className="text-orange-500 font-bold">{user.hoTen}</span>
-              </span>
+              {/* BẤM VÀO ĐÂY ĐỂ VÀO TRANG PROFILE */}
+              <div
+                className="cursor-pointer flex items-center gap-1 hover:opacity-80 transition select-none"
+                onClick={() => navigate("/profile")}
+                title="Xem thông tin cá nhân"
+              >
+                <span className="text-gray-300">Hi,</span>
+                <span className="text-orange-500 font-bold border-b border-transparent hover:border-orange-500">
+                  {user.hoTen}
+                </span>
+              </div>
+
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-2 rounded transition"
+                className="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-2 rounded transition ml-2"
               >
                 Đăng xuất
               </button>

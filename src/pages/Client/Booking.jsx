@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { api } from "../../services/api"; // Import api
-// import { mockDataPhongVe } from "../../mockData"; // Bỏ dòng này
+import { api } from "../../services/api";
 
 export default function Booking() {
   const { maLichChieu } = useParams();
   const navigate = useNavigate();
 
-  // 1. State dữ liệu (Để null ban đầu để chờ API)
+  // 1. State dữ liệu
   const [roomInfo, setRoomInfo] = useState(null);
-
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [discountCode, setDiscountCode] = useState("");
   const [discountAmount, setDiscountAmount] = useState(0);
@@ -50,7 +48,6 @@ export default function Booking() {
   };
 
   const handleSelectSeat = (seat, fullLabel) => {
-    // Chặn nếu ghế đã đặt hoặc có người khác đang đặt
     if (seat.daDat || seat.taiKhoanNguoiDat) return;
 
     const index = selectedSeats.findIndex((s) => s.maGhe === seat.maGhe);
@@ -78,7 +75,6 @@ export default function Booking() {
     }
   };
 
-  // 3. Hiệu ứng Loading khi chưa có dữ liệu
   if (!roomInfo)
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
@@ -95,12 +91,25 @@ export default function Booking() {
   );
   const finalAmount = Math.max(0, tempAmount - discountAmount);
 
-  const handleBooking = () => {
+  // --- HÀM XỬ LÝ ĐẶT VÉ (ĐÃ SỬA) ---
+  const handleBooking = async () => {
+    // 1. Kiểm tra có chọn ghế chưa
     if (selectedSeats.length === 0) {
       alert("Vui lòng chọn ghế!");
       return;
     }
-    // Dữ liệu đặt vé gửi lên API (Structure chuẩn)
+
+    // 2. Kiểm tra đăng nhập
+    const userStr = localStorage.getItem("user");
+    if (!userStr) {
+      alert("Bạn cần đăng nhập để đặt vé!");
+      navigate("/login");
+      return;
+    }
+    const user = JSON.parse(userStr);
+    const token = user.accessToken;
+
+    // 3. Chuẩn bị dữ liệu
     const bookingData = {
       maLichChieu: maLichChieu,
       danhSachVe: selectedSeats.map((seat) => ({
@@ -112,22 +121,27 @@ export default function Booking() {
     if (
       window.confirm(`Xác nhận thanh toán: ${finalAmount.toLocaleString()} đ?`)
     ) {
-      console.log("Gửi API Đặt vé:", bookingData);
-      // api.post("/QuanLyDatVe/DatVe", bookingData)...
-      alert("Đặt vé thành công!");
-      navigate("/");
+      try {
+        // 4. GỌI API THẬT (Kèm Token)
+        await api.post("/QuanLyDatVe/DatVe", bookingData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        alert("Đặt vé thành công! Kiểm tra trong lịch sử nhé.");
+        navigate("/profile"); // Chuyển thẳng về trang Profile để xem vé vừa đặt
+      } catch (error) {
+        console.error("Lỗi đặt vé:", error);
+        alert(error.response?.data?.content || "Đặt vé thất bại!");
+      }
     }
   };
 
-  // --- RENDER HÀNG GHẾ (Logic chia 16 cột chuẩn rạp) ---
   const renderRows = () => {
-    const seatsPerRow = 16; // Số ghế mỗi hàng
+    const seatsPerRow = 16;
     const rows = [];
-
-    // Chia danhSachGhe thành các hàng
     for (let i = 0; i < danhSachGhe.length; i += seatsPerRow) {
       const seatsInRow = danhSachGhe.slice(i, i + seatsPerRow);
-      const rowChar = String.fromCharCode(65 + i / seatsPerRow); // A, B, C...
+      const rowChar = String.fromCharCode(65 + i / seatsPerRow);
       rows.push({ rowChar, seats: seatsInRow });
     }
 
@@ -136,42 +150,30 @@ export default function Booking() {
         key={rowIndex}
         className="flex items-center justify-center gap-2 mb-2"
       >
-        {/* Tên hàng (A, B, C) */}
         <span className="w-6 text-gray-400 font-bold text-center select-none">
           {row.rowChar}
         </span>
-
-        {/* Danh sách ghế */}
         {row.seats.map((seat, index) => {
-          const seatNumber = (index + 1).toString().padStart(2, "0"); // Tạo số 01, 02...
-          const fullLabel = `${row.rowChar}${seatNumber}`; // Ghép thành A01, B02...
-          // --- XÁC ĐỊNH LOẠI GHẾ ---
-          let classSeat = "bg-gray-600 cursor-pointer hover:brightness-125"; // 1. Thường
+          const seatNumber = (index + 1).toString().padStart(2, "0");
+          const fullLabel = `${row.rowChar}${seatNumber}`;
+
+          let classSeat = "bg-gray-600 cursor-pointer hover:brightness-125";
           let disabled = false;
 
-          // 2. VIP (Màu cam)
           if (seat.loaiGhe === "Vip") {
             classSeat =
               "bg-orange-500 shadow-[0_0_10px_orange] border border-orange-400";
           }
-
-          // 3. Đã đặt (Màu xám tối, bị cấm)
           if (seat.daDat) {
             classSeat =
               "bg-gray-800 cursor-not-allowed text-gray-600 border border-gray-700";
             disabled = true;
           }
-
-          // 4. Người khác đang đặt (Màu hồng/đỏ - API trả về taiKhoanNguoiDat)
-          // Lưu ý: API CyberSoft đôi khi trả về daDat=true cho ghế đã bán,
-          // nên ta ưu tiên check taiKhoanNguoiDat nếu muốn hiện màu khác.
           if (seat.taiKhoanNguoiDat) {
             classSeat =
               "bg-pink-600 cursor-not-allowed shadow-[0_0_10px_#db2777] border border-pink-400";
             disabled = true;
           }
-
-          // 5. Đang chọn (Màu xanh lá - Quan trọng nhất)
           const isSelected = selectedSeats.find((s) => s.maGhe === seat.maGhe);
           if (isSelected) {
             classSeat =
@@ -204,7 +206,6 @@ export default function Booking() {
         className="fixed inset-0 bg-cover bg-center z-0 blur-none opacity-30"
         style={{ backgroundImage: `url(${thongTinPhim.hinhAnh})` }}
       ></div>
-
       <div className="container mx-auto px-4 z-10 flex flex-col lg:flex-row gap-6 h-full flex-1 py-6">
         {/* CỘT TRÁI: SƠ ĐỒ */}
         <div className="flex-1 flex flex-col items-center">
@@ -225,19 +226,15 @@ export default function Booking() {
               </p>
             </div>
           </div>
-
           <div className="w-full max-w-4xl mb-10 perspective-1000">
             <div className="w-full h-4 bg-gradient-to-b from-white to-transparent opacity-50 shadow-[0_20px_50px_rgba(255,255,255,0.3)] rounded-[50%] mb-2 transform rotateX(-5deg)"></div>
             <div className="w-full text-center text-gray-500 text-xs tracking-[0.5em] uppercase">
               Màn hình
             </div>
           </div>
-
           <div className="w-full max-w-5xl overflow-x-auto custom-scrollbar flex flex-col items-center">
             {renderRows()}
           </div>
-
-          {/* CHÚ THÍCH 5 LOẠI GHẾ */}
           <div className="flex flex-wrap justify-center gap-4 mt-8 px-4">
             <div className="flex items-center gap-2">
               <div className="w-5 h-5 rounded bg-gray-600"></div>
@@ -257,10 +254,6 @@ export default function Booking() {
               </div>
               <span className="text-gray-400 text-xs">Đã đặt</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded bg-pink-600 border border-pink-400"></div>
-              <span className="text-gray-400 text-xs">Người khác đặt</span>
-            </div>
           </div>
         </div>
 
@@ -270,9 +263,7 @@ export default function Booking() {
             <h3 className="text-2xl font-bold text-center text-white mb-6 pb-4 border-b border-gray-600">
               {thongTinPhim.tenPhim}
             </h3>
-
             <div className="flex-1 space-y-4">
-              {/* 1. NGÀY GIỜ CHIẾU */}
               <div className="flex justify-between text-sm border-b border-gray-600 pb-2">
                 <span className="text-gray-400">Ngày giờ chiếu:</span>
                 <div className="text-right">
@@ -284,24 +275,18 @@ export default function Booking() {
                   </span>
                 </div>
               </div>
-
-              {/* 2. CỤM RẠP */}
               <div className="flex justify-between text-sm border-b border-gray-600 pb-2">
                 <span className="text-gray-400">Cụm rạp:</span>
                 <span className="text-white text-right font-medium">
                   {thongTinPhim.tenCumRap}
                 </span>
               </div>
-
-              {/* 3. TÊN RẠP */}
               <div className="flex justify-between text-sm border-b border-gray-600 pb-2">
                 <span className="text-gray-400">Rạp:</span>
                 <span className="text-white font-bold">
                   {thongTinPhim.tenRap}
                 </span>
               </div>
-
-              {/* 4. GHẾ CHỌN (Hiện dãy ghế A01, B02...) */}
               <div className="border-t border-dashed border-gray-600 pt-4">
                 <span className="text-red-500 font-semibold mb-2 block">
                   Ghế chọn:
@@ -310,7 +295,6 @@ export default function Booking() {
                   {selectedSeats.length > 0 ? (
                     selectedSeats.map((s, i) => (
                       <span key={i} className="text-green-400 font-bold">
-                        {/* Hiển thị label đã lưu ở Bước 1 */}
                         {s.label}
                         {i < selectedSeats.length - 1 && ", "}
                       </span>
@@ -322,8 +306,6 @@ export default function Booking() {
                   )}
                 </div>
               </div>
-
-              {/* 5. MÃ ƯU ĐÃI (Giữ nguyên) */}
               <div className="border-t border-dashed border-gray-600 pt-4">
                 <label className="text-gray-400 text-sm mb-2 block">
                   Mã ưu đãi (VD: CYBER50):
@@ -350,8 +332,6 @@ export default function Booking() {
                 )}
               </div>
             </div>
-
-            {/* TỔNG TIỀN & NÚT ĐẶT VÉ (Giữ nguyên) */}
             <div className="mt-6 pt-6 border-t border-gray-600">
               <div className="flex justify-between items-end mb-4">
                 <span className="text-gray-400">Tổng tiền:</span>

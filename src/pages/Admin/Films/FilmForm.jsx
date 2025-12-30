@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
+import { api } from "../../../services/api"; // Import biến api chuẩn của dự án
 import axios from "axios";
 import moment from "moment";
 
@@ -23,63 +24,42 @@ export default function FilmForm() {
     hinhAnh: null,
   });
 
-  // 1. LẤY THÔNG TIN PHIM KHI Ở CHẾ ĐỘ EDIT
-  // --- THAY THẾ ĐOẠN useEffect CŨ BẰNG ĐOẠN NÀY ---
+  // --- 1. LẤY DỮ LIỆU ---
   useEffect(() => {
     if (isEdit) {
       const fetchFilmDetail = async () => {
         try {
-          console.log("1. Bắt đầu lấy dữ liệu phim ID:", id);
-
-          const result = await axios.get(
-            `https://movienew.cybersoft.edu.vn/api/QuanLyPhim/LayThongTinPhim?MaPhim=${id}`
+          // Dùng api.get (tự động gắn TokenCybersoft)
+          const result = await api.get(
+            `/QuanLyPhim/LayThongTinPhim?MaPhim=${id}`
           );
-
-          console.log("2. Kết quả API trả về:", result.data);
-
           const filmData = result.data.content;
 
-          if (!filmData) {
-            console.error(
-              "3. Lỗi: Không tìm thấy data trong result.data.content"
-            );
-            return;
+          if (filmData) {
+            setFormData({
+              tenPhim: filmData.tenPhim || "",
+              trailer: filmData.trailer || "",
+              moTa: filmData.moTa || "",
+              ngayKhoiChieu: filmData.ngayKhoiChieu
+                ? moment(filmData.ngayKhoiChieu).format("YYYY-MM-DD")
+                : "",
+              dangChieu: filmData.dangChieu || false,
+              sapChieu: filmData.sapChieu || false,
+              hot: filmData.hot || false,
+              danhGia: filmData.danhGia || 0,
+              hinhAnh: null,
+            });
+            setImgPreview(filmData.hinhAnh);
           }
-
-          console.log("3. Dữ liệu phim tìm thấy:", filmData);
-
-          // Cập nhật State
-          setFormData({
-            tenPhim: filmData.tenPhim || "",
-            trailer: filmData.trailer || "",
-            moTa: filmData.moTa || "",
-            // Kiểm tra kỹ ngày tháng
-            ngayKhoiChieu: filmData.ngayKhoiChieu
-              ? moment(filmData.ngayKhoiChieu).format("YYYY-MM-DD")
-              : "",
-            dangChieu: filmData.dangChieu || false,
-            sapChieu: filmData.sapChieu || false,
-            hot: filmData.hot || false,
-            danhGia: filmData.danhGia || 0,
-            hinhAnh: null,
-          });
-
-          // Set ảnh preview
-          setImgPreview(filmData.hinhAnh);
-          console.log("4. Đã setFormData thành công!");
         } catch (error) {
-          console.error("❌ Lỗi khi gọi API:", error);
-          if (error.response && error.response.status === 404) {
-            alert("Phim này không tồn tại hoặc đã bị xóa!");
-            navigate("/admin/films"); // Quay về danh sách nếu lỗi
-          }
+          console.error("Lỗi lấy chi tiết phim:", error);
         }
       };
-
       fetchFilmDetail();
     }
   }, [isEdit, id]);
 
+  // --- 2. XỬ LÝ NHẬP LIỆU ---
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData({
@@ -96,16 +76,26 @@ export default function FilmForm() {
     }
   };
 
-  // 2. LOGIC SUBMIT (PHÂN BIỆT THÊM & SỬA)
+  // --- 3. SUBMIT FORM ---
+  // ... (bên trong FilmForm.jsx)
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Tạo FormData
+    const userStr = localStorage.getItem("user");
+    const user = userStr ? JSON.parse(userStr) : null;
+    const token = user?.accessToken;
+
+    if (!token) {
+      alert("Bạn chưa đăng nhập!");
+      return;
+    }
+
     const data = new FormData();
     data.append("tenPhim", formData.tenPhim);
     data.append("trailer", formData.trailer);
     data.append("moTa", formData.moTa);
-    data.append("maNhom", "GP01"); // Mã nhóm cố định
+    data.append("maNhom", "GP01");
     data.append(
       "ngayKhoiChieu",
       moment(formData.ngayKhoiChieu).format("DD/MM/YYYY")
@@ -115,236 +105,198 @@ export default function FilmForm() {
     data.append("hot", formData.hot);
     data.append("danhGia", formData.danhGia);
 
-    // Xử lý File ảnh
+    // QUAN TRỌNG: Key phải là "hinhAnh"
     if (formData.hinhAnh) {
-      // Nếu có chọn file mới -> gửi file
-      data.append("File", formData.hinhAnh, formData.hinhAnh.name);
-    } else if (isEdit) {
-      // TRƯỜNG HỢP KHÓ:
-      // Nếu đang edit mà không chọn ảnh mới, API CapNhatPhimUpload thường VẪN ĐÒI có file.
-      // Nếu backend hỗ trợ giữ ảnh cũ thì không sao, nhưng nếu bắt buộc:
-      // Bạn có thể cần fetch ảnh cũ về convert sang Blob (nâng cao),
-      // hoặc đơn giản là nhắc user chọn lại ảnh nếu API báo lỗi.
-      // Ở đây tạm thời ta không append 'File' nếu không có file mới.
+      data.append("hinhAnh", formData.hinhAnh, formData.hinhAnh.name);
+    }
+
+    console.log("--- DỮ LIỆU GỬI ĐI ---");
+    for (var pair of data.entries()) {
+      console.log(pair[0] + ", " + pair[1]);
     }
 
     try {
-      if (isEdit) {
-        // --- LOGIC CẬP NHẬT ---
-        // API yêu cầu thêm maPhim vào body khi update
-        data.append("maPhim", id);
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // QUAN TRỌNG: Đặt Content-Type là undefined để trình duyệt tự nhận diện FormData
+          "Content-Type": undefined,
+        },
+      };
 
-        await axios.post(
-          "https://movienew.cybersoft.edu.vn/api/QuanLyPhim/CapNhatPhimUpload",
-          data
+      // Thêm chuỗi ngẫu nhiên vào tên phim để tránh lỗi trùng tên (nguyên nhân gây lỗi 500 phổ biến)
+      if (!isEdit && !formData.tenPhim.includes("Test")) {
+        data.set(
+          "tenPhim",
+          `${formData.tenPhim} - ${Math.floor(Math.random() * 1000)}`
         );
+      }
+
+      if (isEdit) {
+        data.append("maPhim", id);
+        await api.post("/QuanLyPhim/CapNhatPhimUpload", data, config);
         alert("Cập nhật phim thành công!");
       } else {
-        // --- LOGIC THÊM MỚI ---
-        await axios.post(
-          "https://movienew.cybersoft.edu.vn/api/QuanLyPhim/ThemPhimUploadHinh",
-          data
-        );
+        await api.post("/QuanLyPhim/ThemPhimUploadHinh", data, config);
         alert("Thêm phim mới thành công!");
       }
 
       navigate("/admin/films");
     } catch (error) {
       console.error("Lỗi submit:", error);
-      alert(error.response?.data?.content || "Có lỗi xảy ra!");
+      alert(
+        error.response?.data?.content ||
+          "Lỗi 500: Server sập do tên phim bị trùng hoặc file ảnh quá lớn!"
+      );
     }
+    append;
   };
 
-  const getSizeClass = () => {
-    if (componentSize === "small") return "p-2 text-sm";
-    if (componentSize === "large") return "p-4 text-lg";
-    return "p-3 text-base";
-  };
+  // Style chung cho Input: Thêm text-gray-900 và bg-white để sửa lỗi chữ trắng
+  const inputClass =
+    "w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:border-blue-500 text-sm text-gray-900 bg-white";
 
-  const getLabelSize = () => {
-    if (componentSize === "small") return "text-xs mb-1";
-    if (componentSize === "large") return "text-base mb-3";
-    return "text-sm mb-2";
-  };
+  // Helper render Switch
+  const renderSwitch = (name, checked, label) => (
+    <div className="flex items-center mb-6">
+      <label className="w-40 font-semibold text-gray-600 text-sm">
+        {label}:
+      </label>
+      <div className="flex-1">
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            name={name}
+            checked={!!checked}
+            onChange={handleChange}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="max-w-4xl">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <h3 className="text-2xl font-bold text-gray-800">
-          {isEdit ? "Chỉnh Sửa Phim" : "Thêm Phim Mới"}
-        </h3>
-        <NavLink
-          to="/admin/films"
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 shadow-sm"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-            className="w-4 h-4"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
-            />
-          </svg>
-          <span className="font-medium text-sm">Quay lại danh sách</span>
-        </NavLink>
-      </div>
+    <div className="bg-white p-8 rounded-lg shadow-sm max-w-7xl mx-auto">
+      <h3 className="text-xl font-bold mb-6 text-gray-800 border-b pb-4">
+        {isEdit ? `Chỉnh Sửa Phim: ${formData.tenPhim}` : "Thêm Mới Phim"}
+      </h3>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Form Size Switcher */}
-        <div className="flex items-center space-x-4 mb-6">
-          <span className="font-semibold text-gray-700 text-sm">
+      <form onSubmit={handleSubmit}>
+        <div className="flex items-center mb-8">
+          <label className="w-40 font-semibold text-gray-600 text-sm">
             Form Size:
-          </span>
-          {["small", "default", "large"].map((size) => (
-            <button
-              type="button"
-              key={size}
-              onClick={() => setComponentSize(size)}
-              className={`px-3 py-1 text-sm rounded border capitalize transition ${
-                componentSize === size
-                  ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                  : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
-              }`}
-            >
-              {size}
-            </button>
-          ))}
-        </div>
-
-        {/* --- CÁC INPUT --- */}
-        <div>
-          <label
-            className={`block font-semibold text-gray-700 ${getLabelSize()}`}
-          >
-            Tên phim
           </label>
-          <input
-            name="tenPhim"
-            value={formData.tenPhim}
-            onChange={handleChange}
-            className={`w-full rounded border border-gray-300 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition ${getSizeClass()}`}
-          />
+          <div className="flex gap-2">
+            {["Small", "Default", "Large"].map((size) => (
+              <button
+                type="button"
+                key={size}
+                onClick={() => setComponentSize(size.toLowerCase())}
+                className={`px-4 py-1 border rounded text-sm transition ${
+                  componentSize === size.toLowerCase()
+                    ? "bg-blue-500 text-white border-blue-500"
+                    : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
+                }`}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div>
-          <label
-            className={`block font-semibold text-gray-700 ${getLabelSize()}`}
-          >
-            Trailer
+        <div className="flex items-center mb-6">
+          <label className="w-40 font-semibold text-gray-600 text-sm">
+            Tên phim:
           </label>
-          <input
-            name="trailer"
-            value={formData.trailer}
-            onChange={handleChange}
-            className={`w-full rounded border border-gray-300 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition ${getSizeClass()}`}
-          />
+          <div className="flex-1">
+            <input
+              name="tenPhim"
+              value={formData.tenPhim}
+              onChange={handleChange}
+              className={inputClass} // Dùng class đã fix màu chữ
+            />
+          </div>
         </div>
 
-        <div>
-          <label
-            className={`block font-semibold text-gray-700 ${getLabelSize()}`}
-          >
-            Mô tả
+        <div className="flex items-center mb-6">
+          <label className="w-40 font-semibold text-gray-600 text-sm">
+            Trailer:
           </label>
-          <textarea
-            name="moTa"
-            value={formData.moTa}
-            onChange={handleChange}
-            rows={4}
-            className={`w-full rounded border border-gray-300 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition ${getSizeClass()}`}
-          ></textarea>
+          <div className="flex-1">
+            <input
+              name="trailer"
+              value={formData.trailer}
+              onChange={handleChange}
+              className={inputClass}
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-8">
-          <div>
-            <label
-              className={`block font-semibold text-gray-700 ${getLabelSize()}`}
-            >
-              Ngày khởi chiếu
-            </label>
+        <div className="flex items-start mb-6">
+          <label className="w-40 font-semibold text-gray-600 text-sm pt-2">
+            Mô tả:
+          </label>
+          <div className="flex-1">
+            <textarea
+              name="moTa"
+              value={formData.moTa}
+              onChange={handleChange}
+              rows={3}
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center mb-6">
+          <label className="w-40 font-semibold text-gray-600 text-sm">
+            Ngày khởi chiếu:
+          </label>
+          <div className="flex-1">
             <input
               type="date"
               name="ngayKhoiChieu"
               value={formData.ngayKhoiChieu}
               onChange={handleChange}
-              className={`w-full rounded border border-gray-300 text-gray-900 focus:border-blue-500 outline-none ${getSizeClass()}`}
+              className={`${inputClass} w-48`}
             />
           </div>
-          <div>
-            <label
-              className={`block font-semibold text-gray-700 ${getLabelSize()}`}
-            >
-              Đánh giá (Sao)
-            </label>
+        </div>
+
+        {renderSwitch("dangChieu", formData.dangChieu, "Đang chiếu")}
+        {renderSwitch("sapChieu", formData.sapChieu, "Sắp chiếu")}
+        {renderSwitch("hot", formData.hot, "Hot")}
+
+        <div className="flex items-center mb-6">
+          <label className="w-40 font-semibold text-gray-600 text-sm">
+            Số sao:
+          </label>
+          <div className="flex-1">
             <input
               type="number"
               name="danhGia"
               value={formData.danhGia}
               onChange={handleChange}
-              min="1"
+              min="0"
               max="10"
-              className={`w-full rounded border border-gray-300 text-gray-900 focus:border-blue-500 outline-none ${getSizeClass()}`}
+              className={`${inputClass} w-24`}
             />
           </div>
         </div>
 
-        {/* Trạng thái */}
-        <div>
-          <label
-            className={`block font-semibold text-gray-700 mb-2 ${getLabelSize()}`}
-          >
-            Trạng thái
+        <div className="flex items-start mb-8">
+          <label className="w-40 font-semibold text-gray-600 text-sm pt-2">
+            Hình ảnh:
           </label>
-          <div className="flex space-x-8 items-center bg-gray-50 p-4 rounded border border-gray-200">
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                name="dangChieu"
-                checked={formData.dangChieu}
-                onChange={handleChange}
-                className="accent-blue-600 w-5 h-5"
-              />
-              <span className="text-gray-700 text-sm">Đang chiếu</span>
-            </label>
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                name="sapChieu"
-                checked={formData.sapChieu}
-                onChange={handleChange}
-                className="accent-blue-600 w-5 h-5"
-              />
-              <span className="text-gray-700 text-sm">Sắp chiếu</span>
-            </label>
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                name="hot"
-                checked={formData.hot}
-                onChange={handleChange}
-                className="accent-red-500 w-5 h-5"
-              />
-              <span className="text-gray-700 text-sm font-bold">HOT</span>
-            </label>
-          </div>
-        </div>
-
-        {/* Upload Ảnh */}
-        <div>
-          <label
-            className={`block font-semibold text-gray-700 mb-2 ${getLabelSize()}`}
-          >
-            Hình ảnh poster
-          </label>
-          <div className="flex flex-col items-start gap-4">
-            <div className="w-40 h-52 border border-gray-300 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden shadow-sm">
+          <div className="flex-1 flex flex-col gap-3">
+            <input
+              type="file"
+              onChange={handleFileChange}
+              accept="image/*"
+              className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 w-max"
+            />
+            <div className="mt-2 w-40 h-40 border-2 border-dashed border-gray-300 bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden relative">
               {imgPreview ? (
                 <img
                   src={imgPreview}
@@ -352,38 +304,21 @@ export default function FilmForm() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-xs text-gray-400">No image</span>
+                <span className="text-gray-400 text-sm text-center px-2 font-medium">
+                  Chưa chọn ảnh
+                </span>
               )}
-            </div>
-            <div className="flex flex-col">
-              <input
-                type="file"
-                id="upload-photo"
-                className="hidden"
-                onChange={handleFileChange}
-                accept="image/*"
-              />
-              <label
-                htmlFor="upload-photo"
-                className="cursor-pointer bg-blue-100 text-blue-700 hover:bg-blue-200 px-4 py-2 rounded font-medium transition duration-200 inline-flex items-center w-max mb-2"
-              >
-                Chọn file ảnh
-              </label>
-              <div className="text-sm text-gray-500 italic">
-                {isEdit
-                  ? "* Lưu ý: Chọn ảnh mới sẽ thay thế ảnh cũ"
-                  : "* Dung lượng dưới 10MB"}
-              </div>
             </div>
           </div>
         </div>
 
-        <div className="pt-4">
+        <div className="flex items-center">
+          <label className="w-40"></label>
           <button
             type="submit"
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded shadow-sm hover:shadow transition duration-200"
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-8 rounded shadow transition duration-200"
           >
-            {isEdit ? "Cập Nhật Phim" : "Thêm Phim Mới"}
+            {isEdit ? "CẬP NHẬT" : "THÊM MỚI"}
           </button>
         </div>
       </form>

@@ -1,237 +1,220 @@
-import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
-// 1. Import Ant Design và Dayjs
-import { DatePicker, TimePicker } from "antd";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Form, DatePicker, InputNumber, Select, Button, message } from "antd";
 import dayjs from "dayjs";
-import customParseFormat from "dayjs/plugin/customParseFormat";
-
-// Kích hoạt plugin format cho dayjs
-dayjs.extend(customParseFormat);
+import { api } from "../../../services/api"; // Đảm bảo đường dẫn đúng tới file cấu hình api của bạn
 
 export default function Showtime() {
-  const [state, setState] = useState({
-    heThongRap: "",
-    cumRap: "",
-    maPhim: "",
-    ngayChieu: "",
-    gioChieu: "",
-    giaVe: 75000,
-  });
+  const { id } = useParams(); // Lấy mã phim từ URL
+  const navigate = useNavigate();
+  const [form] = Form.useForm();
 
-  const heThongRapList = [
-    { maHeThongRap: "BHD", tenHeThongRap: "BHD Star Cineplex" },
-    { maHeThongRap: "CGV", tenHeThongRap: "CGV Cinema" },
-    { maHeThongRap: "Lotte", tenHeThongRap: "Lotte Cinema" },
-  ];
+  // State lưu dữ liệu
+  const [movieDetail, setMovieDetail] = useState(null);
+  const [heThongRap, setHeThongRap] = useState([]);
+  const [cumRap, setCumRap] = useState([]);
 
-  const [cumRapList, setCumRapList] = useState([]);
+  // --- 1. GỌI API LẤY THÔNG TIN BAN ĐẦU ---
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Gọi song song: Lấy chi tiết phim & Lấy danh sách hệ thống rạp
+        const [movieRes, heThongRes] = await Promise.all([
+          api.get(`/QuanLyPhim/LayThongTinPhim?MaPhim=${id}`),
+          api.get("/QuanLyRap/LayThongTinHeThongRap"),
+        ]);
 
-  const movies = [
-    { maPhim: 1314, tenPhim: "Mỹ Nhân Ngư" },
-    { maPhim: 1329, tenPhim: "Bố Già" },
-    { maPhim: 1344, tenPhim: "Avengers: Endgame" },
-  ];
+        setMovieDetail(movieRes.data.content);
+        setHeThongRap(heThongRes.data.content);
+      } catch (error) {
+        console.error("Lỗi tải dữ liệu:", error);
+      }
+    };
 
-  const handleChangeHeThongRap = (e) => {
-    const maHeThong = e.target.value;
-    setState({ ...state, heThongRap: maHeThong, cumRap: "" });
+    fetchData();
+  }, [id]);
 
-    if (maHeThong === "BHD") {
-      setCumRapList([
-        { maCumRap: "bhd-3-2", tenCumRap: "BHD Star - 3/2" },
-        { maCumRap: "bhd-bitexco", tenCumRap: "BHD Star - Bitexco" },
-      ]);
-    } else if (maHeThong === "CGV") {
-      setCumRapList([
-        { maCumRap: "cgv-aeon", tenCumRap: "CGV Aeon Bình Tân" },
-        { maCumRap: "cgv-undo", tenCumRap: "CGV Crescent Mall" },
-      ]);
-    } else {
-      setCumRapList([]);
+  // --- 2. XỬ LÝ KHI CHỌN HỆ THỐNG RẠP ---
+  const handleChangeHeThongRap = async (value) => {
+    // Reset ô Cụm rạp khi đổi Hệ thống rạp
+    form.setFieldsValue({ maCumRap: null });
+
+    try {
+      const result = await api.get(
+        `/QuanLyRap/LayThongTinCumRapTheoHeThong?maHeThongRap=${value}`
+      );
+      setCumRap(result.data.content);
+    } catch (error) {
+      console.error("Lỗi lấy cụm rạp:", error);
     }
   };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setState({ ...state, [name]: value });
-  };
+  // --- 3. XỬ LÝ SUBMIT (TẠO LỊCH CHIẾU) ---
+  const onFinish = async (values) => {
+    try {
+      // 1. Tìm cụm rạp đã chọn trong danh sách
+      const selectedCum = cumRap.find((c) => c.maCumRap === values.maCumRap);
 
-  // 2. Hàm xử lý riêng cho DatePicker của Antd
-  const onChangeDate = (date, dateString) => {
-    setState({ ...state, ngayChieu: dateString });
-  };
+      // 2. Lấy mã rạp (phòng chiếu) đầu tiên
+      // Lưu ý: Đôi khi rạp đầu tiên bị lỗi, nên ta thử log ra kiểm tra
+      const maRapChinhXac = selectedCum?.danhSachRap?.[0]?.maRap;
 
-  // 3. Hàm xử lý riêng cho TimePicker của Antd
-  const onChangeTime = (time, timeString) => {
-    setState({ ...state, gioChieu: timeString });
-  };
+      if (!maRapChinhXac) {
+        message.error("Không tìm thấy phòng chiếu trong cụm rạp này!");
+        return;
+      }
 
-  // Hàm xử lý riêng cho InputNumber (Giá vé)
-  const onChangeNumber = (value) => {
-    setState({ ...state, giaVe: value });
-  };
+      // 3. Chuẩn bị dữ liệu gửi đi (ÉP KIỂU VỀ SỐ)
+      const dataSubmit = {
+        maPhim: parseInt(id), // Chuyển chuỗi ID từ URL thành số
+        ngayChieuGioChieu: dayjs(values.ngayChieuGio).format(
+          "DD/MM/YYYY HH:mm:ss"
+        ),
+        maRap: parseInt(maRapChinhXac), // Chuyển mã rạp thành số (quan trọng)
+        giaVe: parseInt(values.giaVe), // Chuyển giá vé thành số
+      };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (
-      !state.heThongRap ||
-      !state.cumRap ||
-      !state.maPhim ||
-      !state.ngayChieu ||
-      !state.gioChieu
-    ) {
-      alert("Vui lòng nhập đầy đủ thông tin!");
-      return;
+      console.log("Dữ liệu gửi đi:", dataSubmit); // F12 để xem log này
+
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      const token = user?.accessToken;
+
+      await api.post("/QuanLyDatVe/TaoLichChieu", dataSubmit, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      message.success("Tạo lịch chiếu thành công!");
+      navigate("/admin/films");
+    } catch (error) {
+      console.error(error);
+      // Hiển thị lỗi chi tiết
+      message.error(
+        error.response?.data?.content || "Tạo lịch chiếu thất bại!"
+      );
     }
-    console.log("Dữ liệu gửi đi:", state);
-    alert("Tạo lịch chiếu thành công!");
   };
-
-  // Class style cho Input thường
-  const inputClass =
-    "w-full p-3 rounded border border-gray-300 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition";
-  const labelClass = "block font-semibold text-gray-700 mb-2";
 
   return (
-    <div className="max-w-4xl">
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-8">
-        <h3 className="text-2xl font-bold text-gray-800">Tạo Lịch Chiếu</h3>
+    <div className="max-w-7xl mx-auto p-8 bg-white shadow-lg rounded-lg mt-10">
+      <h3 className="text-2xl font-bold mb-8 text-gray-800">
+        Tạo lịch chiếu -{" "}
+        <span className="text-blue-600">{movieDetail?.tenPhim}</span>
+      </h3>
 
-        <NavLink
-          to="/admin/films"
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 shadow-sm"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-            className="w-4 h-4"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
+      <div className="flex flex-col md:flex-row gap-10">
+        {/* CỘT TRÁI: HÌNH ẢNH POSTER */}
+        <div className="w-full md:w-1/3 flex justify-center items-start">
+          {movieDetail ? (
+            <img
+              src={movieDetail.hinhAnh}
+              alt={movieDetail.tenPhim}
+              className="w-full h-auto rounded-lg shadow-md object-cover"
+              style={{ minHeight: "350px", maxHeight: "450px" }}
             />
-          </svg>
-          <span className="font-medium text-sm">Quay lại</span>
-        </NavLink>
-      </div>
+          ) : (
+            <div className="w-full h-80 bg-gray-100 rounded flex items-center justify-center text-gray-400">
+              Loading...
+            </div>
+          )}
+        </div>
 
-      {/* FORM */}
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Hàng 1: Hệ thống & Cụm rạp */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div>
-            <label className={labelClass}>Hệ thống rạp</label>
-            <select
+        {/* CỘT PHẢI: FORM NHẬP LIỆU */}
+        <div className="w-full md:w-2/3">
+          <Form
+            form={form}
+            name="showtime_form"
+            labelCol={{ span: 8 }} // Nhãn chiếm 8 phần
+            wrapperCol={{ span: 16 }} // Input chiếm 16 phần
+            onFinish={onFinish}
+            initialValues={{ giaVe: 75000 }}
+            size="large"
+            labelAlign="left" // Canh lề trái cho nhãn
+          >
+            <Form.Item
+              label={<span className="font-semibold">Hệ thống rạp</span>}
               name="heThongRap"
-              value={state.heThongRap}
-              onChange={handleChangeHeThongRap}
-              className={inputClass}
+              rules={[
+                { required: true, message: "Vui lòng chọn hệ thống rạp!" },
+              ]}
             >
-              <option value="">-- Chọn hệ thống rạp --</option>
-              {heThongRapList.map((ht) => (
-                <option key={ht.maHeThongRap} value={ht.maHeThongRap}>
-                  {ht.tenHeThongRap}
-                </option>
-              ))}
-            </select>
-          </div>
+              <Select
+                placeholder="Chọn hệ thống rạp"
+                onChange={handleChangeHeThongRap}
+                options={heThongRap.map((ht) => ({
+                  label: ht.tenHeThongRap,
+                  value: ht.maHeThongRap,
+                }))}
+              />
+            </Form.Item>
 
-          <div>
-            <label className={labelClass}>Cụm rạp</label>
-            <select
-              name="cumRap"
-              value={state.cumRap}
-              onChange={handleChange}
-              className={`${inputClass} disabled:bg-gray-100 disabled:text-gray-400`}
-              disabled={!state.heThongRap}
+            <Form.Item
+              label={<span className="font-semibold">Cụm rạp</span>}
+              name="maCumRap"
+              rules={[{ required: true, message: "Vui lòng chọn cụm rạp!" }]}
             >
-              <option value="">-- Chọn cụm rạp --</option>
-              {cumRapList.map((cr) => (
-                <option key={cr.maCumRap} value={cr.maCumRap}>
-                  {cr.tenCumRap}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+              <Select
+                placeholder="Chọn cụm rạp"
+                disabled={!cumRap.length}
+                options={cumRap.map((cr) => ({
+                  label: cr.tenCumRap,
+                  value: cr.maCumRap,
+                }))}
+              />
+            </Form.Item>
 
-        {/* Hàng 2: Chọn Phim */}
-        <div>
-          <label className={labelClass}>Chọn Phim</label>
-          <select
-            name="maPhim"
-            value={state.maPhim}
-            onChange={handleChange}
-            className={inputClass}
-          >
-            <option value="">-- Vui lòng chọn phim --</option>
-            {movies.map((phim) => (
-              <option key={phim.maPhim} value={phim.maPhim}>
-                {phim.tenPhim}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Hàng 3: Ngày, Giờ & Giá vé (DÙNG ANT DESIGN) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* NGÀY CHIẾU */}
-          <div>
-            <label className={labelClass}>Ngày chiếu</label>
-            <DatePicker
-              format="DD/MM/YYYY" // Định dạng ngày Việt Nam
-              onChange={onChangeDate}
-              placeholder="Chọn ngày chiếu"
-              size="large" // Kích thước lớn cho đồng bộ với ô input khác
-              className="w-full" // Full width
-              // Không cho chọn ngày quá khứ
-              disabledDate={(current) =>
-                current && current < dayjs().endOf("day")
+            <Form.Item
+              label={
+                <span className="font-semibold">Ngày chiếu giờ chiếu</span>
               }
-            />
-          </div>
+              name="ngayChieuGio"
+              rules={[{ required: true, message: "Vui lòng chọn ngày giờ!" }]}
+            >
+              <DatePicker
+                showTime
+                format="DD/MM/YYYY HH:mm"
+                className="w-full"
+                placeholder="Chọn ngày và giờ"
+              />
+            </Form.Item>
 
-          {/* GIỜ CHIẾU */}
-          <div>
-            <label className={labelClass}>Giờ chiếu</label>
-            <TimePicker
-              format="HH:mm" // Định dạng giờ phút
-              onChange={onChangeTime}
-              placeholder="Chọn giờ chiếu"
-              size="large"
-              className="w-full"
-            />
-          </div>
-
-          {/* GIÁ VÉ */}
-          <div>
-            <label className={labelClass}>Giá vé (VNĐ)</label>
-            <input
-              type="number"
+            <Form.Item
+              label={<span className="font-semibold">Giá vé</span>}
               name="giaVe"
-              value={state.giaVe}
-              onChange={handleChange}
-              step="5000"
-              className={inputClass}
-            />
-          </div>
-        </div>
+              rules={[{ required: true, message: "Vui lòng nhập giá vé!" }]}
+            >
+              <InputNumber
+                className="w-full"
+                min={75000}
+                step={5000}
+                // CÁCH 1: Hiển thị chữ VNĐ ngay bên trong số tiền
+                formatter={(value) =>
+                  `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " VNĐ"
+                }
+                parser={(value) => value.replace(/\s?VNĐ|(,*)/g, "")}
+                // XÓA DÒNG NÀY ĐI: addonAfter="VNĐ"
+              />
+            </Form.Item>
 
-        {/* Nút Submit */}
-        <div className="pt-4 flex justify-start">
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded shadow-sm hover:shadow-lg transition duration-200"
-          >
-            Tạo Lịch Chiếu
-          </button>
+            {/* Phần nút bấm chức năng */}
+            <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
+              <div className="flex items-center gap-4">
+                <span className="font-semibold text-gray-700 -ml-24 w-24 text-right inline-block mr-6">
+                  Chức năng:
+                </span>
+
+                <Button
+                  type="default"
+                  htmlType="submit"
+                  className="border-gray-300 shadow-sm hover:border-blue-500 hover:text-blue-500"
+                >
+                  Tạo lịch chiếu
+                </Button>
+              </div>
+            </Form.Item>
+          </Form>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

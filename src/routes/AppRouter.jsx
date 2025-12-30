@@ -8,6 +8,7 @@ import Detail from "../pages/Client/Detail";
 import Booking from "../pages/Client/Booking";
 import Register from "../pages/Client/Register";
 import Login from "../pages/Client/Login";
+import UserInfo from "../pages/Client/User/UserInfo";
 
 // --- Import phần Admin ---
 import AdminGuard from "../HOC/AdminGuard";
@@ -24,8 +25,8 @@ const AppRouter = () => {
       <Route path="" element={<HomeTemplate />}>
         <Route path="" element={<Home />} />
         <Route path="detail/:id" element={<Detail />} />
-        <Route path="profile" element={<div>Profile</div>} />
         <Route path="booking/:maLichChieu" element={<Booking />} />
+        <Route path="profile" element={<UserInfo />} />
       </Route>
 
       {/* --- AUTH ROUTES --- */}
@@ -48,7 +49,7 @@ const AppRouter = () => {
         <Route path="films/edit/:id" element={<FilmForm />} />
 
         {/* Tạo lịch chiếu */}
-        <Route path="showtime" element={<Showtime />} />
+        <Route path="showtime/:id/:tenPhim" element={<Showtime />} />
 
         {/* Quản lý user */}
         <Route path="users" element={<UserManagement />} />
